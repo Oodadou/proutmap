@@ -1,0 +1,57 @@
+name: Vraie version (Expo)
+
+on:
+  workflow_dispatch:
+    inputs:
+      profil:
+        description: "preview = APK à installer pour tester ; production = AAB pour le Play Store"
+        required: true
+        default: preview
+        type: choice
+        options: [preview, production]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EAS_NO_VCS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier le jeton Expo
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Le secret EXPO_TOKEN est absent."
+            exit 1
+          fi
+
+      - name: Préparer le code
+        run: |
+          if [ -f proutmap-github.zip ]; then
+            rm -rf /tmp/src && mkdir -p /tmp/src
+            unzip -q -o proutmap-github.zip -d /tmp/src
+            DIR=$(dirname "$(find /tmp/src -name package.json -not -path '*/node_modules/*' | head -1)")
+          else
+            DIR="$GITHUB_WORKSPACE"
+          fi
+          echo "Code utilisé : $DIR"
+          grep -n "package:\|versionCode" "$DIR/app.config.js" || true
+          echo "APP_DIR=$DIR" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Installer les modules
+        run: cd "$APP_DIR" && npm ci
+
+      - name: Lancer la fabrication chez Expo
+        run: cd "$APP_DIR" && eas build --platform android --profile ${{ inputs.profil }} --non-interactive --no-wait
