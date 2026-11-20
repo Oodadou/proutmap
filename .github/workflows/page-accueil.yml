@@ -1,0 +1,49 @@
+# Met en ligne la page d'accueil (lien de partage) sur https://oodadou.github.io/proutmap/
+# Se relance tout seul à chaque envoi de proutmap-github.zip (prend le dossier site/ du zip).
+# Réglage nécessaire une seule fois : Settings → Pages → Source : « GitHub Actions ».
+name: Page d'accueil
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Récupérer le dossier site
+        run: |
+          if [ -f proutmap-github.zip ]; then
+            rm -rf /tmp/src && mkdir -p /tmp/src
+            unzip -q -o proutmap-github.zip -d /tmp/src
+            SITE=$(find /tmp/src -type d -name site -not -path '*/node_modules/*' | head -1)
+          else
+            SITE="$GITHUB_WORKSPACE/site"
+          fi
+          if [ ! -f "$SITE/index.html" ]; then
+            echo "::error::Dossier site/ introuvable"; exit 1
+          fi
+          mkdir -p _site && cp -r "$SITE"/. _site/
+          ls -la _site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
